@@ -425,6 +425,21 @@ func (s *JujuConnSuite) tearDownConn(c *gc.C) {
 	testServer := gitjujutesting.MgoServer.Addr()
 	serverAlive := testServer != ""
 
+	for _, st := range s.apiStates {
+		err := st.Close()
+		if serverAlive {
+			c.Check(err, gc.IsNil)
+		}
+	}
+	s.apiStates = nil
+	if s.APIState != nil {
+		err := s.APIState.Close()
+		s.APIState = nil
+		if serverAlive {
+			c.Check(err, gc.IsNil)
+		}
+	}
+
 	// Bootstrap will set the admin password, and render non-authorized use
 	// impossible. s.State may still hold the right password, so try to reset
 	// the password so that the MgoSuite soft-resetting works. If that fails,
@@ -445,20 +460,6 @@ func (s *JujuConnSuite) tearDownConn(c *gc.C) {
 			)
 		}
 		s.State = nil
-	}
-	for _, st := range s.apiStates {
-		err := st.Close()
-		if serverAlive {
-			c.Check(err, gc.IsNil)
-		}
-	}
-	s.apiStates = nil
-	if s.APIState != nil {
-		err := s.APIState.Close()
-		s.APIState = nil
-		if serverAlive {
-			c.Check(err, gc.IsNil)
-		}
 	}
 	dummy.Reset()
 	utils.SetHome(s.oldHome)
