@@ -435,9 +435,6 @@ func (s *JujuConnSuite) tearDownConn(c *gc.C) {
 	// it will still work, but it will take a while since it has to kill the
 	// whole database and start over.
 	if s.State != nil {
-		if err := s.State.SetAdminMongoPassword(""); err != nil && serverAlive {
-			c.Logf("cannot reset admin password: %v", err)
-		}
 		err := s.State.Close()
 		if serverAlive {
 			// This happens way too often with failing tests,
@@ -466,6 +463,16 @@ func (s *JujuConnSuite) tearDownConn(c *gc.C) {
 				gc.IsNil,
 				gc.Commentf("closing api state failed, testing server %q is alive", testServer),
 			)
+		}
+	}
+	if serverAlive {
+		if session, err := gitjujutesting.MgoServer.Dial(); err != nil {
+			c.Logf("cannot connect to mongo to reset admin password: %v", err)
+		} else {
+			defer session.Close()
+			if err := mongo.SetAdminMongoPassword(session, state.AdminUser, ""); err != nil {
+				c.Logf("cannot reset admin password: %v", err)
+			}
 		}
 	}
 	dummy.Reset()
