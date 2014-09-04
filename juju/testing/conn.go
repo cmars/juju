@@ -429,24 +429,7 @@ func (s *JujuConnSuite) tearDownConn(c *gc.C) {
 	testServer := gitjujutesting.MgoServer.Addr()
 	serverAlive := testServer != ""
 
-	// Bootstrap will set the admin password, and render non-authorized use
-	// impossible. s.State may still hold the right password, so try to reset
-	// the password so that the MgoSuite soft-resetting works. If that fails,
-	// it will still work, but it will take a while since it has to kill the
-	// whole database and start over.
-	if s.State != nil {
-		err := s.State.Close()
-		if serverAlive {
-			// This happens way too often with failing tests,
-			// so add some context in case of an error.
-			c.Check(
-				err,
-				gc.IsNil,
-				gc.Commentf("closing state failed, testing server %q is alive", testServer),
-			)
-		}
-		s.State = nil
-	}
+	// Close all api clients
 	for _, st := range s.apiStates {
 		err := st.Close()
 		if serverAlive {
@@ -465,6 +448,26 @@ func (s *JujuConnSuite) tearDownConn(c *gc.C) {
 			)
 		}
 	}
+
+	// Close the state
+	if s.State != nil {
+		err := s.State.Close()
+		if serverAlive {
+			// This happens way too often with failing tests,
+			// so add some context in case of an error.
+			c.Check(
+				err,
+				gc.IsNil,
+				gc.Commentf("closing state failed, testing server %q is alive", testServer),
+			)
+		}
+		s.State = nil
+	}
+
+	// Bootstrap will set the admin password, and render non-authorized use
+	// impossible. Try to reset the password so that the MgoSuite
+	// soft-resetting works. If that fails, it will still work, but it will
+	// take a while since it has to kill the whole database and start over.
 	if serverAlive {
 		if session, err := gitjujutesting.MgoServer.Dial(); err != nil {
 			c.Logf("cannot connect to mongo to reset admin password: %v", err)
@@ -475,6 +478,7 @@ func (s *JujuConnSuite) tearDownConn(c *gc.C) {
 			}
 		}
 	}
+
 	dummy.Reset()
 	utils.SetHome(s.oldHome)
 	osenv.SetJujuHome(s.oldJujuHome)
