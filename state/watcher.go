@@ -64,64 +64,82 @@ type RelationUnitsWatcher interface {
 	Changes() <-chan multiwatcher.RelationUnitsChange
 }
 
-// NotifyWatchers combines two NotifyWatcher structs into a single watcher.
-type NotifyWatchers struct {
+// MeterStatusWatcher combines two NotifyWatcher structs into a single watcher for meter status.
+type MeterStatusWatcher struct {
 	NotifyWatcher
-	w1 NotifyWatcher
-	w2 NotifyWatcher
+	w1  NotifyWatcher
+	w2  NotifyWatcher
+	out chan struct{}
+}
+
+// NewMeterStatusWatcher returns a new MeterStatusWatcher.
+func NewMeterStatusWatcher(w1, w2 NotifyWatcher) *MeterStatusWatcher {
+	out := make(chan struct{})
+	w := &MeterStatusWatcher{w1: w1, w2: w2, out: out}
+	go func() {
+		var ch1, ch2 bool
+		for {
+			select {
+			case <-w1.Changes():
+				ch1 = true
+			default:
+			}
+			select {
+			case <-w2.Changes():
+				ch2 = true
+			default:
+			}
+			if ch1 || ch2 {
+				out <- struct{}{}
+				ch1 = false
+				ch2 = false
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
+	return w
 }
 
 // Changes implements the NotifyWatcher interface.
-func (n *NotifyWatchers) Changes() <-chan struct{} {
-	r := make(chan struct{})
-	go func() {
-		select {
-		case <-n.w1.Changes():
-			r <- struct{}{}
-		case <-n.w2.Changes():
-			r <- struct{}{}
+func (n *MeterStatusWatcher) Changes() <-chan struct{} {
+	return n.out
+}
+
+func (n *MeterStatusWatcher) combineErrors(err1, err2 error) error {
+	if err1 != nil {
+		if err2 != nil {
+			return errors.Wrap(err1, err2)
 		}
-	}()
-	return r
+		return err1
+	}
+	return err2
 }
 
 // Kill implements the Watcher interface.
-func (n *NotifyWatchers) Kill() {
-	n.w1.Kill()
-	n.w2.Kill()
+func (n *MeterStatusWatcher) Kill() {
+	defer n.w1.Kill()
+	defer n.w2.Kill()
 }
 
 // Wait implements the Watcher interface.
-func (n *NotifyWatchers) Wait() error {
-	if err := n.w1.Wait(); err != nil {
-		return err
-	}
-	if err := n.w2.Wait(); err != nil {
-		return err
-	}
-	return nil
+func (n *MeterStatusWatcher) Wait() error {
+	err1 := n.w1.Wait()
+	err2 := n.w2.Wait()
+	return n.combineErrors(err1, err2)
 }
 
 // Stop implements the Watcher interface.
-func (n *NotifyWatchers) Stop() error {
-	if err := n.w1.Stop(); err != nil {
-		return err
-	}
-	if err := n.w2.Stop(); err != nil {
-		return err
-	}
-	return nil
+func (n *MeterStatusWatcher) Stop() error {
+	err1 := n.w1.Stop()
+	err2 := n.w2.Stop()
+	return n.combineErrors(err1, err2)
 }
 
 // Err implements the Watcher interface.
-func (n *NotifyWatchers) Err() error {
-	if err := n.w1.Err(); err != nil {
-		return err
-	}
-	if err := n.w2.Err(); err != nil {
-		return err
-	}
-	return nil
+func (n *MeterStatusWatcher) Err() error {
+	err1 := n.w1.Err()
+	err2 := n.w2.Err()
+	return n.combineErrors(err1, err2)
 }
 
 // commonWatcher is part of all client watchers.
@@ -1396,13 +1414,13 @@ func (u *Unit) watchUnitMeterStatus() NotifyWatcher {
 // WatchMeterStatus returns a watcher observing changes that affect the meter status
 // of a unit.
 func (u *Unit) WatchMeterStatus() NotifyWatcher {
-	return &NotifyWatchers{w1: u.watchUnitMeterStatus(), w2: u.st.watchMetricsMangager()}
+	return NewMeterStatusWatcher(u.watchUnitMeterStatus(), u.st.watchMetricsMangager())
 }
 
 // watchMetricsMangager returns a watcher observing the changes to the metrics
 // manager collection
 func (st *State) watchMetricsMangager() NotifyWatcher {
-	return newEntityWatcher(st, metricsManagerC, metricsManagerKey)
+	return newEntityWatcher(st, metricsManagerC, st.docID(metricsManagerKey))
 }
 
 func newEntityWatcher(st *State, collName string, key interface{}) NotifyWatcher {

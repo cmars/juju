@@ -99,7 +99,6 @@ func (s *UnitSuite) TestMeterStatusRemovedWithUnit(c *gc.C) {
 
 func (s *MeterStateSuite) TestMeterStatusWatcherRespondstoMeterStatus(c *gc.C) {
 	watcher := s.unit.WatchMeterStatus()
-	<-watcher.Changes() // After creation there is an item in the channel, let's get rid of it
 	start := make(chan struct{})
 	go func() {
 		err := s.unit.SetMeterStatus("GREEN", "Information.")
@@ -107,35 +106,38 @@ func (s *MeterStateSuite) TestMeterStatusWatcherRespondstoMeterStatus(c *gc.C) {
 		<-start
 	}()
 	start <- struct{}{}
-	select {
-	case <-watcher.Changes():
-	case <-time.After(testing.LongWait):
-		c.Fatalf("expected event from watcher by now")
+	for i := 0; i < 2; i++ {
+		select {
+		case <-watcher.Changes():
+		case <-time.After(testing.LongWait):
+			c.Fatalf("expected event from watcher by now")
+		}
 	}
 }
 
 func (s *MeterStateSuite) TestMeterStatusWatcherRespondsToMetricsManager(c *gc.C) {
-	mm, err := s.State.NewMetricsManager()
+	mm, err := s.State.MetricsManager()
 	c.Assert(err, jc.ErrorIsNil)
 	code, info := mm.MeterStatus()
 	watcher := s.unit.WatchMeterStatus()
-	<-watcher.Changes()
 	start := make(chan struct{})
 	go func() {
-		err := mm.SetMetricsManagerSuccessfulSend(time.Now())
+		err := mm.SetLastSuccessfulSend(time.Now())
 		c.Assert(err, jc.ErrorIsNil)
 		for i := 0; i < 3; i++ {
 			err := mm.IncrementConsecutiveErrors()
 			c.Assert(err, jc.ErrorIsNil)
 		}
 		code, info = mm.MeterStatus()
-		c.Assert(code, gc.Equals, "AMBER") // Confirm meter status has changed
+		c.Assert(code, gc.Equals, state.MeterAmber) // Confirm meter status has changed
 		<-start
 	}()
 	start <- struct{}{}
-	select {
-	case <-watcher.Changes():
-	case <-time.After(testing.LongWait):
-		c.Fatalf("expected event from watcher by now")
+	for i := 0; i < 2; i++ {
+		select {
+		case <-watcher.Changes():
+		case <-time.After(testing.LongWait):
+			c.Fatalf("expected event from watcher by now")
+		}
 	}
 }
