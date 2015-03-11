@@ -64,6 +64,84 @@ type RelationUnitsWatcher interface {
 	Changes() <-chan multiwatcher.RelationUnitsChange
 }
 
+// MeterStatusWatcher combines two NotifyWatcher structs into a single watcher for meter status.
+type MeterStatusWatcher struct {
+	NotifyWatcher
+	w1  NotifyWatcher
+	w2  NotifyWatcher
+	out chan struct{}
+}
+
+// NewMeterStatusWatcher returns a new MeterStatusWatcher.
+func NewMeterStatusWatcher(w1, w2 NotifyWatcher) *MeterStatusWatcher {
+	out := make(chan struct{})
+	w := &MeterStatusWatcher{w1: w1, w2: w2, out: out}
+	go func() {
+		var ch1, ch2 bool
+		for {
+			select {
+			case <-w1.Changes():
+				ch1 = true
+			default:
+			}
+			select {
+			case <-w2.Changes():
+				ch2 = true
+			default:
+			}
+			if ch1 || ch2 {
+				out <- struct{}{}
+				ch1 = false
+				ch2 = false
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
+	return w
+}
+
+// Changes implements the NotifyWatcher interface.
+func (n *MeterStatusWatcher) Changes() <-chan struct{} {
+	return n.out
+}
+
+func (n *MeterStatusWatcher) combineErrors(err1, err2 error) error {
+	if err1 != nil {
+		if err2 != nil {
+			return errors.Wrap(err1, err2)
+		}
+		return err1
+	}
+	return err2
+}
+
+// Kill implements the Watcher interface.
+func (n *MeterStatusWatcher) Kill() {
+	defer n.w1.Kill()
+	defer n.w2.Kill()
+}
+
+// Wait implements the Watcher interface.
+func (n *MeterStatusWatcher) Wait() error {
+	err1 := n.w1.Wait()
+	err2 := n.w2.Wait()
+	return n.combineErrors(err1, err2)
+}
+
+// Stop implements the Watcher interface.
+func (n *MeterStatusWatcher) Stop() error {
+	err1 := n.w1.Stop()
+	err2 := n.w2.Stop()
+	return n.combineErrors(err1, err2)
+}
+
+// Err implements the Watcher interface.
+func (n *MeterStatusWatcher) Err() error {
+	err1 := n.w1.Err()
+	err2 := n.w2.Err()
+	return n.combineErrors(err1, err2)
+}
+
 // commonWatcher is part of all client watchers.
 type commonWatcher struct {
 	st   *State
@@ -1338,10 +1416,22 @@ func (u *Unit) WatchConfigSettings() (NotifyWatcher, error) {
 	return newEntityWatcher(u.st, settingsC, u.st.docID(settingsKey)), nil
 }
 
-// WatchMeterStatus returns a watcher observing the changes to the unit's
+// watchUnitMeterStatus returns a watcher observing the changes to the unit's
 // meter status.
-func (u *Unit) WatchMeterStatus() NotifyWatcher {
+func (u *Unit) watchUnitMeterStatus() NotifyWatcher {
 	return newEntityWatcher(u.st, meterStatusC, u.st.docID(u.globalKey()))
+}
+
+// WatchMeterStatus returns a watcher observing changes that affect the meter status
+// of a unit.
+func (u *Unit) WatchMeterStatus() NotifyWatcher {
+	return NewMeterStatusWatcher(u.watchUnitMeterStatus(), u.st.watchMetricsMangager())
+}
+
+// watchMetricsMangager returns a watcher observing the changes to the metrics
+// manager collection
+func (st *State) watchMetricsMangager() NotifyWatcher {
+	return newEntityWatcher(st, metricsManagerC, st.docID(metricsManagerKey))
 }
 
 func newEntityWatcher(st *State, collName string, key interface{}) NotifyWatcher {

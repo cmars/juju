@@ -89,15 +89,21 @@ func (c NotifyWatcherC) AssertNoChange() {
 	}
 }
 
-func (c NotifyWatcherC) AssertOneChange() {
+func (c NotifyWatcherC) AssertNChanges(n int) {
 	c.State.StartSync()
-	select {
-	case _, ok := <-c.Watcher.Changes():
-		c.Assert(ok, jc.IsTrue)
-	case <-time.After(testing.LongWait):
-		c.Fatalf("watcher did not send change")
+	for i := 0; i < n; i++ {
+		select {
+		case _, ok := <-c.Watcher.Changes():
+			c.Assert(ok, jc.IsTrue)
+		case <-time.After(testing.LongWait):
+			c.Fatalf("watcher did not send change")
+		}
 	}
 	c.AssertNoChange()
+}
+
+func (c NotifyWatcherC) AssertOneChange() {
+	c.AssertNChanges(1)
 }
 
 func (c NotifyWatcherC) AssertClosed() {
