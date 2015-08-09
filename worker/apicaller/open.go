@@ -37,6 +37,7 @@ func OpenAPIState(agentConfig agent.Config, a Agent) (_ *api.State, _ *apiagent.
 		}
 	}()
 
+	logger.Errorf("st=%+v a=%+v", st, a)
 	entity, err := st.Agent().Entity(a.Tag())
 	if err == nil && entity.Life() == params.Dead {
 		logger.Errorf("agent terminating - entity %q is dead", a.Tag())

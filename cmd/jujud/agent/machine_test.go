@@ -1136,7 +1136,7 @@ func opRecvTimeout(c *gc.C, st *state.State, opc <-chan dummy.Operation, kinds .
 
 func (s *MachineSuite) TestOpenStateFailsForJobHostUnits(c *gc.C) {
 	m, _, _ := s.primeAgent(c, version.Current, state.JobHostUnits)
-	a := s.newAgent(c, m)
+	s.newAgent(c, m)
 	s.assertJobWithAPI(c, state.JobHostUnits, func(conf agent.Config, st *api.State) {
 		s.AssertCannotOpenState(c, conf.Tag(), conf.DataDir())
 	})

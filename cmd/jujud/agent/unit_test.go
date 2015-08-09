@@ -251,6 +251,7 @@ func (s *UnitSuite) TestOpenAPIState(c *gc.C) {
 	_, unit, _, _ := s.primeAgent(c)
 	var ent state.AgentEntity = unit
 	var agentCmd apicaller.Agent
+	agentCmd = s.newAgent(c, unit)
 	initialPassword := initialUnitPassword
 
 	conf, err := agent.ReadConfig(agent.ConfigPath(s.DataDir(), ent.Tag()))
