@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -31,6 +32,32 @@ import (
 	coretools "github.com/juju/juju/tools"
 	"github.com/juju/juju/version"
 )
+
+const (
+	JujuTestJujudPathKey = "JUJU_TEST_JUJUD_PATH"
+)
+
+func BuildJujud(c *gc.C, dir string) {
+	cmdSuffix := ""
+	if runtime.GOOS == "windows" {
+		cmdSuffix = ".exe"
+	}
+
+	jujudDir := os.Getenv(JujuTestJujudPathKey)
+	if jujudDir != "" {
+		jujudFile := filepath.Join(jujudDir, "jujud"+cmdSuffix)
+		_, err := os.Stat(jujudFile)
+		if os.IsNotExist(err) {
+			err = tools.BuildJujud(jujudDir)
+		}
+		c.Assert(err, jc.ErrorIsNil)
+		err = utils.CopyFile(filepath.Join(dir, "jujud"+cmdSuffix), jujudFile)
+		c.Assert(err, jc.ErrorIsNil)
+	} else {
+		err := tools.BuildJujud(dir)
+		c.Assert(err, jc.ErrorIsNil)
+	}
+}
 
 func GetMockBundleTools(c *gc.C) tools.BundleToolsFunc {
 	return func(w io.Writer, forceVersion *version.Number) (vers version.Binary, sha256Hash string, err error) {

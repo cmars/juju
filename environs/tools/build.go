@@ -188,7 +188,7 @@ func copyExistingJujud(dir string) error {
 	return nil
 }
 
-func buildJujud(dir string) error {
+func BuildJujud(dir string) error {
 	logger.Infof("building jujud")
 	cmds := [][]string{
 		{"go", "build", "-gccgoflags=-static-libgo", "-o", filepath.Join(dir, names.Jujud), "github.com/juju/juju/cmd/jujud"},
@@ -223,7 +223,7 @@ func bundleTools(w io.Writer, forceVersion *version.Number) (tvers version.Binar
 
 	if err := copyExistingJujud(dir); err != nil {
 		logger.Debugf("copy existing failed: %v", err)
-		if err := buildJujud(dir); err != nil {
+		if err := BuildJujud(dir); err != nil {
 			return version.Binary{}, "", err
 		}
 	}

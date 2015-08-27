@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -24,6 +23,7 @@ import (
 
 	"github.com/juju/juju/agent/tools"
 	"github.com/juju/juju/apiserver/params"
+	toolstesting "github.com/juju/juju/environs/tools/testing"
 	"github.com/juju/juju/juju/testing"
 	"github.com/juju/juju/state"
 	"github.com/juju/juju/testcharms"
@@ -58,11 +58,7 @@ func (s *UniterSuite) SetUpSuite(c *gc.C) {
 	err := os.MkdirAll(toolsDir, 0755)
 	c.Assert(err, jc.ErrorIsNil)
 	// TODO(fwereade) GAAAAAAAAAAAAAAAAAH this is LUDICROUS.
-	cmd := exec.Command("go", "build", "github.com/juju/juju/cmd/jujud")
-	cmd.Dir = toolsDir
-	out, err := cmd.CombinedOutput()
-	c.Logf(string(out))
-	c.Assert(err, jc.ErrorIsNil)
+	toolstesting.BuildJujud(c, toolsDir)
 	s.oldLcAll = os.Getenv("LC_ALL")
 	os.Setenv("LC_ALL", "en_US")
 	s.unitDir = filepath.Join(s.dataDir, "agents", "unit-u-0")
