@@ -29,6 +29,7 @@ import (
 	gc "gopkg.in/check.v1"
 	corecharm "gopkg.in/juju/charm.v5"
 	goyaml "gopkg.in/yaml.v1"
+	"launchpad.net/tomb"
 
 	apiuniter "github.com/juju/juju/api/uniter"
 	"github.com/juju/juju/apiserver/params"
@@ -130,7 +131,8 @@ func (ctx *context) run(c *gc.C, steps []stepper) {
 		if ctx.uniter != nil {
 			err := ctx.uniter.Stop()
 			if ctx.err == "" {
-				c.Assert(err, jc.ErrorIsNil)
+				c.Assert(err == nil || errors.Cause(err) == tomb.ErrDying, jc.IsTrue,
+					gc.Commentf("%v", err))
 			} else {
 				c.Assert(err, gc.ErrorMatches, ctx.err)
 			}
