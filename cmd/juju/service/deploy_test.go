@@ -971,12 +971,20 @@ func (s *DeployCharmStoreSuite) TestAddMetricCredentials(c *gc.C) {
 	defer cleanup()
 
 	stub := &jujutesting.Stub{}
+	mockAllocClient := &mockAPIClient{Stub: stub}
+	s.PatchValue(&getApiClient, func(*http.Client) (apiClient, error) { return mockAllocClient, nil })
 	handler := &testMetricsRegistrationHandler{Stub: stub}
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	testcharms.UploadCharm(c, s.client, "cs:quantal/metered-1", "metered")
-	deploy := &DeployCommand{Steps: []DeployStep{&RegisterMeteredCharm{RegisterURL: server.URL, QueryURL: server.URL}}}
+	deploy := &DeployCommand{Steps: []DeployStep{
+		&RegisterMeteredCharm{
+			AllocateBudget: AllocateBudget{
+				APIClient: mockAllocClient,
+			},
+			RegisterURL: server.URL,
+			QueryURL:    server.URL}}}
 	_, err := coretesting.RunCommand(c, modelcmd.Wrap(deploy), "cs:quantal/metered-1", "--plan", "someplan")
 	c.Assert(err, jc.ErrorIsNil)
 	curl := charm.MustParseURL("cs:quantal/metered-1")
@@ -988,6 +996,8 @@ func (s *DeployCharmStoreSuite) TestAddMetricCredentials(c *gc.C) {
 	c.Assert(called, jc.IsTrue)
 	modelUUID, _ := s.Environ.Config().UUID()
 	stub.CheckCalls(c, []jujutesting.StubCall{{
+		"CreateAllocation", []interface{}{"personal", "0", modelUUID, []string{"metered"}},
+	}, {
 		"Authorize", []interface{}{metricRegistrationPost{
 			ModelUUID:   modelUUID,
 			CharmURL:    "cs:quantal/metered-1",
@@ -1018,12 +1028,20 @@ func (s *DeployCharmStoreSuite) TestAddMetricCredentialsDefaultPlan(c *gc.C) {
 	defer cleanup()
 
 	stub := &jujutesting.Stub{}
+	mockAllocClient := &mockAPIClient{Stub: stub}
+	s.PatchValue(&getApiClient, func(*http.Client) (apiClient, error) { return mockAllocClient, nil })
 	handler := &testMetricsRegistrationHandler{Stub: stub}
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	testcharms.UploadCharm(c, s.client, "cs:quantal/metered-1", "metered")
-	deploy := &DeployCommand{Steps: []DeployStep{&RegisterMeteredCharm{RegisterURL: server.URL, QueryURL: server.URL}}}
+	deploy := &DeployCommand{Steps: []DeployStep{
+		&RegisterMeteredCharm{
+			AllocateBudget: AllocateBudget{
+				APIClient: mockAllocClient,
+			},
+			RegisterURL: server.URL,
+			QueryURL:    server.URL}}}
 	_, err := coretesting.RunCommand(c, modelcmd.Wrap(deploy), "cs:quantal/metered-1")
 	c.Assert(err, jc.ErrorIsNil)
 	curl := charm.MustParseURL("cs:quantal/metered-1")
@@ -1035,6 +1053,8 @@ func (s *DeployCharmStoreSuite) TestAddMetricCredentialsDefaultPlan(c *gc.C) {
 	c.Assert(called, jc.IsTrue)
 	modelUUID, _ := s.Environ.Config().UUID()
 	stub.CheckCalls(c, []jujutesting.StubCall{{
+		"CreateAllocation", []interface{}{"personal", "0", modelUUID, []string{"metered"}},
+	}, {
 		"DefaultPlan", []interface{}{"cs:quantal/metered-1"},
 	}, {
 		"Authorize", []interface{}{metricRegistrationPost{
@@ -1058,6 +1078,13 @@ func (s *DeploySuite) TestAddMetricCredentialsDefaultForUnmeteredCharm(c *gc.C) 
 		},
 	}
 
+	stub := &jujutesting.Stub{}
+	mockAllocClient := &mockAPIClient{Stub: stub}
+	s.PatchValue(&getApiClient, func(*http.Client) (apiClient, error) { return mockAllocClient, nil })
+	handler := &testMetricsRegistrationHandler{Stub: stub}
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
 	cleanup := jujutesting.PatchValue(&getMetricCredentialsAPI, func(_ api.Connection) (metricCredentialsAPI, error) {
 		return setter, nil
 	})
@@ -1065,12 +1092,18 @@ func (s *DeploySuite) TestAddMetricCredentialsDefaultForUnmeteredCharm(c *gc.C) 
 
 	testcharms.Repo.ClonedDirPath(s.SeriesPath, "dummy")
 
-	deploy := &DeployCommand{Steps: []DeployStep{&RegisterMeteredCharm{}}}
+	deploy := &DeployCommand{Steps: []DeployStep{&RegisterMeteredCharm{
+		AllocateBudget: AllocateBudget{
+			APIClient: mockAllocClient,
+		},
+		RegisterURL: server.URL,
+		QueryURL:    server.URL}}}
 	_, err := coretesting.RunCommand(c, modelcmd.Wrap(deploy), "local:dummy")
 	c.Assert(err, jc.ErrorIsNil)
 	curl := charm.MustParseURL("local:trusty/dummy-1")
 	s.AssertService(c, "dummy", curl, 1, 0)
 	c.Assert(called, jc.IsFalse)
+	stub.CheckCalls(c, nil)
 }
 
 func (s *DeploySuite) TestDeployFlags(c *gc.C) {
@@ -1130,12 +1163,19 @@ func (s *DeployCharmStoreSuite) TestDeployCharmsEndpointNotImplemented(c *gc.C) 
 	defer cleanup()
 
 	stub := &jujutesting.Stub{}
+	mockAllocClient := &mockAPIClient{Stub: stub}
+	s.PatchValue(&getApiClient, func(*http.Client) (apiClient, error) { return mockAllocClient, nil })
 	handler := &testMetricsRegistrationHandler{Stub: stub}
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	testcharms.UploadCharm(c, s.client, "cs:quantal/metered-1", "metered")
-	deploy := &DeployCommand{Steps: []DeployStep{&RegisterMeteredCharm{RegisterURL: server.URL, QueryURL: server.URL}}}
+	deploy := &DeployCommand{Steps: []DeployStep{&RegisterMeteredCharm{
+		AllocateBudget: AllocateBudget{
+			APIClient: mockAllocClient,
+		},
+		RegisterURL: server.URL,
+		QueryURL:    server.URL}}}
 	_, err := coretesting.RunCommand(c, modelcmd.Wrap(deploy), "cs:quantal/metered-1", "--plan", "someplan")
 
 	c.Assert(err, gc.ErrorMatches, "IsMetered")

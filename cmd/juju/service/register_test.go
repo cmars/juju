@@ -24,20 +24,32 @@ import (
 var _ = gc.Suite(&registrationSuite{})
 
 type registrationSuite struct {
-	stub     *testing.Stub
-	handler  *testMetricsRegistrationHandler
-	server   *httptest.Server
-	register DeployStep
-	ctx      *cmd.Context
+	testing.CleanupSuite
+
+	stub        *testing.Stub
+	allocClient apiClient
+	handler     *testMetricsRegistrationHandler
+	server      *httptest.Server
+	register    DeployStep
+	ctx         *cmd.Context
 }
 
 func (s *registrationSuite) SetUpTest(c *gc.C) {
 	s.stub = &testing.Stub{}
 	s.handler = &testMetricsRegistrationHandler{Stub: s.stub}
 	s.server = httptest.NewServer(s.handler)
+
+	allocClient := &mockAPIClient{Stub: &testing.Stub{}}
+	s.PatchValue(&getApiClient, func(*http.Client) (apiClient, error) {
+		return allocClient, nil
+	})
+
 	s.register = &RegisterMeteredCharm{
-		AllocateBudget: AllocateBudget{AllocationSpec: "personal:100"},
-		Plan:           "someplan", RegisterURL: s.server.URL,
+		AllocateBudget: AllocateBudget{
+			APIClient:      allocClient,
+			AllocationSpec: "personal:100",
+		},
+		Plan: "someplan", RegisterURL: s.server.URL,
 	}
 	s.ctx = coretesting.Context(c)
 }
@@ -88,7 +100,7 @@ func (s *registrationSuite) TestMeteredCharmDeployError(c *gc.C) {
 	d := DeploymentInfo{
 		CharmURL:    charm.MustParseURL("cs:quantal/metered-1"),
 		ServiceName: "service name",
-		ModelUUID:   "environment uuid",
+		ModelUUID:   "model uuid",
 	}
 	err := s.register.RunPre(&mockAPIConnection{Stub: s.stub}, client, s.ctx, d)
 	c.Assert(err, jc.ErrorIsNil)
@@ -104,7 +116,7 @@ func (s *registrationSuite) TestMeteredCharmDeployError(c *gc.C) {
 		"APICall", []interface{}{"Charms", "IsMetered", params.CharmInfo{CharmURL: "cs:quantal/metered-1"}},
 	}, {
 		"Authorize", []interface{}{metricRegistrationPost{
-			ModelUUID:   "environment uuid",
+			ModelUUID:   "model uuid",
 			CharmURL:    "cs:quantal/metered-1",
 			ServiceName: "service name",
 			PlanURL:     "someplan",
@@ -181,8 +193,11 @@ func (s *registrationSuite) TestMeteredLocalCharmNoPlan(c *gc.C) {
 
 func (s *registrationSuite) TestMeteredCharmNoPlanSet(c *gc.C) {
 	s.register = &RegisterMeteredCharm{
-		AllocateBudget: AllocateBudget{AllocationSpec: "personal:100"},
-		RegisterURL:    s.server.URL, QueryURL: s.server.URL}
+		AllocateBudget: AllocateBudget{
+			APIClient:      s.allocClient,
+			AllocationSpec: "personal:100",
+		},
+		RegisterURL: s.server.URL, QueryURL: s.server.URL}
 	client := httpbakery.NewClient().Client
 	d := DeploymentInfo{
 		CharmURL:    charm.MustParseURL("cs:quantal/metered-1"),
@@ -224,8 +239,11 @@ func (s *registrationSuite) TestMeteredCharmNoPlanSet(c *gc.C) {
 func (s *registrationSuite) TestMeteredCharmNoDefaultPlan(c *gc.C) {
 	s.stub.SetErrors(nil, nil, errors.NotFoundf("default plan"))
 	s.register = &RegisterMeteredCharm{
-		AllocateBudget: AllocateBudget{AllocationSpec: "personal:100"},
-		RegisterURL:    s.server.URL, QueryURL: s.server.URL}
+		AllocateBudget: AllocateBudget{
+			APIClient:      s.allocClient,
+			AllocationSpec: "personal:100",
+		},
+		RegisterURL: s.server.URL, QueryURL: s.server.URL}
 	client := httpbakery.NewClient().Client
 	d := DeploymentInfo{
 		CharmURL:    charm.MustParseURL("cs:quantal/metered-1"),
@@ -248,8 +266,11 @@ func (s *registrationSuite) TestMeteredCharmNoDefaultPlan(c *gc.C) {
 func (s *registrationSuite) TestMeteredCharmFailToQueryDefaultCharm(c *gc.C) {
 	s.stub.SetErrors(nil, nil, errors.New("something failed"))
 	s.register = &RegisterMeteredCharm{
-		AllocateBudget: AllocateBudget{AllocationSpec: "personal:100"},
-		RegisterURL:    s.server.URL, QueryURL: s.server.URL}
+		AllocateBudget: AllocateBudget{
+			APIClient:      s.allocClient,
+			AllocationSpec: "personal:100",
+		},
+		RegisterURL: s.server.URL, QueryURL: s.server.URL}
 	client := httpbakery.NewClient().Client
 	d := DeploymentInfo{
 		CharmURL:    charm.MustParseURL("cs:quantal/metered-1"),
