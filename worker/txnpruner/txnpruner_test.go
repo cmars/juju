@@ -31,11 +31,13 @@ func (s *TxnPrunerSuite) TestPrunes(c *gc.C) {
 		case <-fakePruner.pruneCh:
 			t1 := time.Now()
 			if i > 0 {
-				// Check that pruning runs at the expected interval
-				// (but not the first time around as we don't know
-				// when the worker actually started).
+				// Check that pruning runs at the expected interval (but not
+				// the first time around as we don't know when the worker
+				// actually started). The difference between the measured delta
+				// and the interval should be less than 1ms allowing for slight
+				// timing variances due to scheduling.
 				td := t1.Sub(t0)
-				c.Assert(td >= interval, jc.IsTrue, gc.Commentf("td=%s", td))
+				c.Assert((td-interval) < time.Millisecond, jc.IsTrue, gc.Commentf("td=%s", td))
 			}
 			t0 = t1
 		case <-time.After(testing.LongWait):
