@@ -41,6 +41,7 @@ func (s *commandSuite) TestRegister(c *gc.C) {
 		"set-budget",
 		"set-plan",
 		"show-budget",
+		"sla",
 		"update-allocation",
 	})
 }
