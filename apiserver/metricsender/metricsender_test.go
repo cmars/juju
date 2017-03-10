@@ -49,7 +49,7 @@ func (s *MetricSenderSuite) SetUpTest(c *gc.C) {
 func (s *MetricSenderSuite) TestToWire(c *gc.C) {
 	now := time.Now().Round(time.Second)
 	metric := s.Factory.MakeMetric(c, &factory.MetricParams{Unit: s.credUnit, Sent: false, Time: &now})
-	result := metricsender.ToWire(metric, []byte("sla creds"))
+	result := metricsender.ToWire(metric)
 	m := metric.Metrics()[0]
 	metrics := []wireformat.Metric{
 		{
@@ -66,7 +66,7 @@ func (s *MetricSenderSuite) TestToWire(c *gc.C) {
 		Created:        metric.Created().UTC(),
 		Metrics:        metrics,
 		Credentials:    metric.Credentials(),
-		SLACredentials: []byte("sla creds"),
+		SLACredentials: metric.SLACredentials(),
 	}
 	c.Assert(result, gc.DeepEquals, expected)
 }
@@ -94,6 +94,7 @@ func (s *MetricSenderSuite) TestSendMetrics(c *gc.C) {
 	c.Assert(sent2.Sent(), jc.IsTrue)
 }
 
+// TODO We should have a test in state as well
 func (s *MetricSenderSuite) TestSendMetricsWithSLA(c *gc.C) {
 	var sender testing.MockSender
 	now := time.Now()

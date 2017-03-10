@@ -6,8 +6,11 @@
 package metricsmanager
 
 import (
+	"fmt"
+
 	"github.com/juju/errors"
 	"github.com/juju/loggo"
+	"github.com/juju/utils"
 	"github.com/juju/utils/clock"
 	"gopkg.in/juju/names.v2"
 
@@ -15,6 +18,7 @@ import (
 	"github.com/juju/juju/apiserver/facade"
 	"github.com/juju/juju/apiserver/metricsender"
 	"github.com/juju/juju/apiserver/params"
+	"github.com/juju/juju/instance"
 	"github.com/juju/juju/state"
 )
 
@@ -45,6 +49,36 @@ type MetricsManagerAPI struct {
 }
 
 var _ MetricsManager = (*MetricsManagerAPI)(nil)
+
+// JujuMachines adds ua metrics to stat??
+// TODO (mattyw) This probably should't live here.
+func JujuMachines(st *state.State) error {
+	allMachines, err := st.AllMachines()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	machineCount := 0
+	for _, machine := range allMachines {
+		if machine.ContainerType() == instance.NONE {
+			machineCount++
+		}
+	}
+	t := clock.WallClock.Now()
+	metricUUID, err := utils.NewUUID()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = st.AddMetrics(state.BatchParam{
+		UUID:    metricUUID.String(),
+		Created: t,
+		Metrics: []state.Metric{{
+			Key:   "juju-machines",
+			Value: fmt.Sprintf("%d", machineCount),
+			Time:  t,
+		}},
+	})
+	return err
+}
 
 // newMetricsManagerAPI wraps NewMetricsManagerAPI for RegisterStandardFacade.
 func newMetricsManagerAPI(
@@ -164,6 +198,11 @@ func (api *MetricsManagerAPI) SendMetrics(args params.Entities) (params.ErrorRes
 		if err != nil {
 			result.Results[i].Error = common.ServerError(err)
 			continue
+		}
+		err = JujuMachines(api.state)
+		if err != nil {
+			// TODO Warn for now, probably just fail later?
+			logger.Warningf("failed to generate juju machine metrics: %v", err)
 		}
 		err = metricsender.SendMetrics(modelState, sender, api.clock, maxBatchesPerSend, txVendorMetrics)
 		if err != nil {

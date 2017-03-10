@@ -34,15 +34,16 @@ type MetricBatch struct {
 }
 
 type metricBatchDoc struct {
-	UUID        string    `bson:"_id"`
-	ModelUUID   string    `bson:"model-uuid"`
-	Unit        string    `bson:"unit"`
-	CharmURL    string    `bson:"charmurl"`
-	Sent        bool      `bson:"sent"`
-	DeleteTime  time.Time `bson:"delete-time"`
-	Created     time.Time `bson:"created"`
-	Metrics     []Metric  `bson:"metrics"`
-	Credentials []byte    `bson:"credentials"`
+	UUID           string    `bson:"_id"`
+	ModelUUID      string    `bson:"model-uuid"`
+	Unit           string    `bson:"unit"`
+	CharmURL       string    `bson:"charmurl"`
+	Sent           bool      `bson:"sent"`
+	DeleteTime     time.Time `bson:"delete-time"`
+	Created        time.Time `bson:"created"`
+	Metrics        []Metric  `bson:"metrics"`
+	Credentials    []byte    `bson:"credentials"`
+	SLACredentials []byte    `bson:"sla-credentials"`
 }
 
 // Metric represents a single Metric.
@@ -92,6 +93,18 @@ type BatchParam struct {
 	Unit     names.UnitTag
 }
 
+func (st *State) metricCredentials(unitTag names.UnitTag) ([]byte, error) {
+	unit, err := st.Unit(unitTag.Id())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	application, err := unit.Application()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return application.MetricCredentials(), nil
+}
+
 // AddMetrics adds a new batch of metrics to the database.
 func (st *State) AddMetrics(batch BatchParam) (*MetricBatch, error) {
 	if len(batch.Metrics) == 0 {
@@ -102,11 +115,16 @@ func (st *State) AddMetrics(batch BatchParam) (*MetricBatch, error) {
 		return nil, errors.NewNotValid(err, "could not parse charm URL")
 	}
 
-	unit, err := st.Unit(batch.Unit.Id())
-	if err != nil {
-		return nil, errors.Trace(err)
+	metricCreds := []byte{}
+	if batch.Unit.Id() != "" {
+		var err error
+		metricCreds, err = st.metricCredentials(batch.Unit)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
-	application, err := unit.Application()
+
+	slaCreds, err := st.SLACredential()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -114,14 +132,15 @@ func (st *State) AddMetrics(batch BatchParam) (*MetricBatch, error) {
 	metric := &MetricBatch{
 		st: st,
 		doc: metricBatchDoc{
-			UUID:        batch.UUID,
-			ModelUUID:   st.ModelUUID(),
-			Unit:        batch.Unit.Id(),
-			CharmURL:    charmURL.String(),
-			Sent:        false,
-			Created:     batch.Created,
-			Metrics:     batch.Metrics,
-			Credentials: application.MetricCredentials(),
+			UUID:           batch.UUID,
+			ModelUUID:      st.ModelUUID(),
+			Unit:           batch.Unit.Id(),
+			CharmURL:       charmURL.String(),
+			Sent:           false,
+			Created:        batch.Created,
+			Metrics:        batch.Metrics,
+			Credentials:    metricCreds,
+			SLACredentials: slaCreds,
 		},
 	}
 	if err := metric.validate(); err != nil {
@@ -390,6 +409,11 @@ func (m *MetricBatch) SetSent(t time.Time) error {
 // Credentials returns any credentials associated with the metric batch.
 func (m *MetricBatch) Credentials() []byte {
 	return m.doc.Credentials
+}
+
+// SLACredentials returns any sla credentials associated with the metric batch.
+func (m *MetricBatch) SLACredentials() []byte {
+	return m.doc.SLACredentials
 }
 
 func setSentOps(batchUUIDs []string, deleteTime time.Time) []txn.Op {

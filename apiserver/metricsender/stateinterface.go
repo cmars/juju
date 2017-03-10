@@ -22,7 +22,6 @@ type MetricsSenderBackend interface {
 	SetMetricBatchesSent(batchUUIDs []string) error
 	CountOfUnsentMetrics() (int, error)
 	CountOfSentMetrics() (int, error)
-	SLACredential() ([]byte, error)
 }
 
 // ModelBackend contains additional methods that are used by the metrics sender.
