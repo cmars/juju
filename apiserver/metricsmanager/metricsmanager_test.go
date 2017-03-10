@@ -140,6 +140,30 @@ func (s *metricsManagerSuite) TestSendMetrics(c *gc.C) {
 	c.Assert(m.Sent(), jc.IsTrue)
 }
 
+func (s *metricsManagerSuite) TestSendMetricsMachineMetrics(c *gc.C) {
+	s.Factory.MakeMachine(c, nil)
+	var sender testing.MockSender
+	metricsmanager.PatchSender(&sender)
+	now := time.Now()
+	metric := state.Metric{"pings", "5", now}
+	s.Factory.MakeMetric(c, &factory.MetricParams{Unit: s.unit, Sent: true, Time: &now, Metrics: []state.Metric{metric}})
+	unsent := s.Factory.MakeMetric(c, &factory.MetricParams{Unit: s.unit, Sent: false, Time: &now, Metrics: []state.Metric{metric}})
+	args := params.Entities{Entities: []params.Entity{
+		{s.State.ModelTag().String()},
+	}}
+	result, err := s.metricsmanager.SendMetrics(args)
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(result.Results, gc.HasLen, 1)
+	c.Assert(result.Results[0], gc.DeepEquals, params.ErrorResult{Error: nil})
+	c.Assert(sender.Data, gc.HasLen, 1)
+	// TODO (mattyw) It will probably always be in this order, but also probably not
+	// so this assert shouldn't be like this.
+	c.Assert(sender.Data[0][1].Metrics[0].Key, gc.Equals, "juju-machines")
+	m, err := s.State.MetricBatch(unsent.UUID())
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(m.Sent(), jc.IsTrue)
+}
+
 func (s *metricsManagerSuite) TestSendOldMetricsInvalidArg(c *gc.C) {
 	args := params.Entities{Entities: []params.Entity{
 		{"invalid"},

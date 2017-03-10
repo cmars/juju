@@ -15,7 +15,7 @@ import (
 
 var senderLogger = loggo.GetLogger("juju.worker.metricworker.sender")
 
-const senderPeriod = 5 * time.Minute
+const senderPeriod = 1 * time.Minute
 
 // NewSender creates a new periodic worker that sends metrics
 // to a collection service.

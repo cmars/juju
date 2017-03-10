@@ -18,7 +18,7 @@ import (
 	"github.com/juju/juju/apiserver/facade"
 	"github.com/juju/juju/apiserver/metricsender"
 	"github.com/juju/juju/apiserver/params"
-	"github.com/juju/juju/instance"
+	//"github.com/juju/juju/instance"
 	"github.com/juju/juju/state"
 )
 
@@ -51,18 +51,22 @@ type MetricsManagerAPI struct {
 var _ MetricsManager = (*MetricsManagerAPI)(nil)
 
 // JujuMachines adds ua metrics to stat??
+// TODO Only send if SA creds are set.
 // TODO (mattyw) This probably should't live here.
 func JujuMachines(st *state.State) error {
+	logger.Errorf("jujumachines")
 	allMachines, err := st.AllMachines()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	machineCount := 0
-	for _, machine := range allMachines {
-		if machine.ContainerType() == instance.NONE {
-			machineCount++
+	machineCount := len(allMachines)
+	/*
+		for _, machine := range allMachines {
+			if machine.ContainerType() == instance.NONE {
+				machineCount++
+			}
 		}
-	}
+	*/
 	t := clock.WallClock.Now()
 	metricUUID, err := utils.NewUUID()
 	if err != nil {
@@ -164,8 +168,16 @@ func (api *MetricsManagerAPI) CleanupOldMetrics(args params.Entities) (params.Er
 
 // SendMetrics will send any unsent metrics onto the metric collection service.
 func (api *MetricsManagerAPI) SendMetrics(args params.Entities) (params.ErrorResults, error) {
+	// TODO Not great - demo ware - need to think more about where this goes.
+	logger.Errorf("sending")
 	result := params.ErrorResults{
 		Results: make([]params.ErrorResult, len(args.Entities)),
+	}
+	err := JujuMachines(api.state)
+	if err != nil {
+		// TODO Warn for now, probably just fail later?
+		logger.Warningf("failed to generate juju machine metrics: %v", err)
+		return result, errors.Trace(err)
 	}
 	if len(args.Entities) == 0 {
 		return result, nil
@@ -198,11 +210,6 @@ func (api *MetricsManagerAPI) SendMetrics(args params.Entities) (params.ErrorRes
 		if err != nil {
 			result.Results[i].Error = common.ServerError(err)
 			continue
-		}
-		err = JujuMachines(api.state)
-		if err != nil {
-			// TODO Warn for now, probably just fail later?
-			logger.Warningf("failed to generate juju machine metrics: %v", err)
 		}
 		err = metricsender.SendMetrics(modelState, sender, api.clock, maxBatchesPerSend, txVendorMetrics)
 		if err != nil {

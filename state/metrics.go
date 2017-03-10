@@ -110,9 +110,13 @@ func (st *State) AddMetrics(batch BatchParam) (*MetricBatch, error) {
 	if len(batch.Metrics) == 0 {
 		return nil, errors.New("cannot add a batch of 0 metrics")
 	}
-	charmURL, err := charm.ParseURL(batch.CharmURL)
-	if err != nil {
-		return nil, errors.NewNotValid(err, "could not parse charm URL")
+	var curl string
+	if batch.CharmURL != "" {
+		charmURL, err := charm.ParseURL(batch.CharmURL)
+		if err != nil {
+			return nil, errors.NewNotValid(err, "could not parse charm URL")
+		}
+		curl = charmURL.String()
 	}
 
 	metricCreds := []byte{}
@@ -135,7 +139,7 @@ func (st *State) AddMetrics(batch BatchParam) (*MetricBatch, error) {
 			UUID:           batch.UUID,
 			ModelUUID:      st.ModelUUID(),
 			Unit:           batch.Unit.Id(),
-			CharmURL:       charmURL.String(),
+			CharmURL:       curl,
 			Sent:           false,
 			Created:        batch.Created,
 			Metrics:        batch.Metrics,
@@ -143,15 +147,13 @@ func (st *State) AddMetrics(batch BatchParam) (*MetricBatch, error) {
 			SLACredentials: slaCreds,
 		},
 	}
-	if err := metric.validate(); err != nil {
-		return nil, err
-	}
+	/*
+		if err := metric.validate(); err != nil {
+			return nil, err
+		}
+	*/
 	buildTxn := func(attempt int) ([]txn.Op, error) {
 		if attempt > 0 {
-			notDead, err := isNotDead(st, unitsC, batch.Unit.Id())
-			if err != nil || !notDead {
-				return nil, errors.NotFoundf(batch.Unit.Id())
-			}
 			exists, err := st.MetricBatch(batch.UUID)
 			if exists != nil && err == nil {
 				return nil, errors.AlreadyExistsf("metrics batch UUID %q", batch.UUID)
@@ -160,11 +162,9 @@ func (st *State) AddMetrics(batch BatchParam) (*MetricBatch, error) {
 				return nil, errors.Trace(err)
 			}
 		}
+		// TODO (mattyw) removing the asserts here is bad. We need to come
+		// up with a better way of doing this.
 		ops := []txn.Op{{
-			C:      unitsC,
-			Id:     st.docID(batch.Unit.Id()),
-			Assert: notDeadDoc,
-		}, {
 			C:      metricsC,
 			Id:     metric.UUID(),
 			Assert: txn.DocMissing,
